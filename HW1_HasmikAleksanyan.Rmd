@@ -1,0 +1,352 @@
+---
+title: "Homework 1"
+author: "Hasmik Aleksanyan"
+date: "March 8, 2020"
+output: 
+  html_document:
+    theme: "united"
+    highlight: "zenburn"
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(ggplot2, dplyr, naniar, eeptools, knitr, gridExtra, ggpubr, ggthemes, ggcorplot)
+```
+
+
+# Task 1: Data Cleaning
+Import the file into R. Detect missing values and convert them to NAs. There are 4 types of missing values. Comment on your findings of types of missing values.
+
+How many missing values are in the data?
+
+Two of the variables consist of inconsistent values. Detect them using the function table(). Solve the problem without losing the information.
+
+Check whether the data types are correct, if not make appropriate corrections assigning labels to each level according to the data description. For checking, use the function sapply().
+
+Create two variables of age using dates of surveys.
+
+There are two variables (apart from age) that provide the same information, drop one of them. Get rid of variables that are irrelevant for visualization and/or variables that are not provided in the data description. Drop NAs.1
+
+Show and describe the structure and dimension of the data. Classify variables as qualitative (nominal or ordinal) or quantitative (interval or ratio).
+
+
+
+## Solution 1
+```{r}
+dat<- read.csv('surveydata.csv')
+
+head(dat)
+```
+There are 4 types of missing values in the survey data.
+
+1st type: 98. Prefer not to respond, 99. Do not know
+
+2nd type: 100 
+
+3rd type: NA
+
+4th type: missing value
+
+
+```{r}
+
+dat <- replace_with_na(dat, replace=list(Pre_P3 = c(98,99,100,""),
+                                         Pre_P4 = c(98,99,100,""),
+                                         Pre_P5 = c(98,99,100,""),
+                                         Pre_P6 = c(98,99,100,""),
+                                         Pre_P7 = c(98,99,100,""),
+                                         Pre_P9 = c(98,99,100,""),
+                                         Post_P3 = c(98,99,100,""),
+                                         Post_P4 = c(98,99,100,""),
+                                         Post_P5 = c(98,99,100,""),
+                                         Post_P6 = c(98,99,100,""),
+                                         Post_P7 = c(98,99,100,""),
+                                         Post_P9 = c(98,99,100,"")))
+sum(is.na(dat))
+```
+
+There are 115 NAs in the data, that I am going to drop and some inconsistent values, that I am not going to drop. I will replace them to more  logical values.
+
+```{r}
+
+t1 <-table(dat$Pre_P6)
+t1
+t2 <-table(dat$Pre_Answers)
+t2
+
+dat$Pre_P6<- replace(dat$Pre_P6, dat$Pre_P6 == '1w', 1 )
+dat$Pre_P6<- replace(dat$Pre_P6, dat$Pre_P6 == '2w', 2 )
+dat$Pre_Answers<- replace(dat$Pre_Answers, dat$Pre_Answers == -5, 5 )
+dat$Pre_Answers<- replace(dat$Pre_Answers, dat$Pre_Answers == -6, 6 )
+```
+
+```{r}
+
+dat$Pre_Treatmen.type<-factor(dat$Pre_Treatmen.type, labels = c('Control','Treatment_1', 'Treatment_2'))
+dat$Pre_P1<-factor(dat$Pre_P1, labels = c('Female','Male'))
+dat$Post_P1<-factor(dat$Post_P1, labels = c('Female','Male'))
+dat$Pre_P4<-factor(dat$Pre_P4, labels = c('Excellent','Satisfactory','Fair'))
+dat$Post_P4<-factor(dat$Post_P4, labels = c('Excellent','Satisfactory','Fair'))
+dat$Pre_P5<-factor(dat$Pre_P5, labels = c('Secondary_school','Vocational','Higher_educational'))
+dat$Post_P5<-factor(dat$Post_P5, labels = c('Secondary_school','Vocational','Higher_educational'))
+
+dat$income<- as.integer(dat$income)
+dat$spendings<-as.integer(dat$spendings)
+dat$Pre_Answers<- as.integer(dat$Pre_Answers)
+
+a<-strptime(dat$P2,format="%m/%d/%Y")
+dat$P2<-as.Date(a, format=("m%/d%/Y%"))
+b<-strptime(dat$Pre_Date,format="%m/%d/%Y")
+dat$Pre_Date<-as.Date(b, format=("m%/d%/Y%"))
+c<-strptime(dat$Post_Date,format="%m/%d/%Y")
+dat$Post_Date<-as.Date(c, format=("b%/d%/Y%"))
+
+dat<-na.omit(dat)
+```
+
+ As variables `Pre_P1`,`Post_P1`,`Pre_P4`,`Post_P4`,`Pre_P5`,`Post_P5` have unique values, I have changes their format to factor. And I've changed the formats of `P2`, `Pre_date`, `Post_date` as date. Also I've dropped all NAs.
+ 
+```{r}
+
+dat$Pre_age<-as.integer(age_calc(dat$P2, dat$Pre_Date, units="years"))
+dat$Post_age<-as.integer(age_calc(dat$P2, dat$Post_Date, units= "years"))
+dat<- dat%>%
+  select (-c('ID','Pre_Date', 'Post_Date', 'Post_P1' , 'Pre_Pre', 'Pre_P6', 'Post_P6', 'P2'))
+
+```
+I've dropped one of the coulumns describing the gender(`Post_P1`), because I think that children hadn't changed their gender during the survey. And also I've dropped `ID` and all culumns that are not provided in the data description.
+
+```{r}
+str(dat)
+```
+The final data consists of 18 attributes and 99 observations. 
+
+Qualitive variables:
+
+  Nominal:`Pre_Treatmen.type, Pre_P1`
+  
+  Ordinal:`Pre_P4, Pre_P5, Post_P4, Post_P5`
+  
+Quantitive  variables:
+
+  Ratio: `Pre_P3, Pre_P7, Pre_P9, Post_P3,Post_P7, Post_P9, income, spendings, Pre_answers, Post_Answers, Pre_age, Post_age`
+
+
+# Task 2: Summary Statistics
+Create a function that takes the categorical variable as an argument and returns a table with the number and percentage of each category (e.g. males and females) in each group of treatment status. Use the function group_by() and pipe operators. The columns of the final table will be:
+Treatment Type
+Categorical Variable Name
+Number of observations
+Percentage
+Create a function that takes a numeric variable as an argument and returns the table with the mean and standard deviation of argument grouped by treatment status. Use the function group_by() and pipe operators. The columns of the final table will be:2
+Treatment Type
+Mean
+Standart deviation
+Yes, okay, I know, this is not the R programming HW. But these functions will make our life easy, so try to answer the following questions (or to solve them).
+
+Show the mean and variability of spendings by groups. Show the number of observations grouped by gender and treatment type. Then show the number of observations grouped by another categorical variable (choose your own) and treatment type. 3
+
+Make meaningful conclusions in the sense of randomization.
+
+
+
+## Solution 2
+
+```{r}
+
+kable( data.frame(dat %>% 
+   group_by(Treatment_Type=Pre_Treatmen.type, Overall_Preformance=Pre_P4) %>%
+  summarise(number_of_obs = n()) %>%
+  mutate(Percentage = number_of_obs/sum(number_of_obs))))
+ 
+```
+
+```{r}
+kable( data.frame(dat %>% 
+   group_by(Treatment_Type=Pre_Treatmen.type) %>%
+  summarise(Mean_of_age = round(mean(Post_age),1), standard_deviation_of_age = round(sd(Post_age),1))))
+```
+
+```{r}
+kable(data.frame(dat %>%
+                   group_by(Treatment_Type=Pre_Treatmen.type) %>%
+                   summarise(var_spendings = round(var(spendings),1), mean_spendings = round(mean(spendings),1))))
+kable( data.frame(dat %>% 
+                    group_by(Treatment_Type=Pre_Treatmen.type, Gender=Pre_P1) %>%
+                    summarise(number_of_obs = n())))
+
+kable( data.frame(dat %>% 
+                    group_by(Treatment_Type=Pre_Treatmen.type, Education_of_mother=Pre_P5) %>%
+                    summarise(number_of_obs = n())))
+
+```
+
+From the first data frame we can see that students who have Fair overall performance are very few. The standard deviation of age is very small, so the sudents' age interval is aproximately from 16 to 17. The mean of spendings in all groups are very close in value. But in the 4th data frame we can see than in two groups the number of females are bigger than males'. And from the 5th data frame it is clear that students whose mothers have secondary school education are less then athers. But overall randomization is not bad.
+
+
+
+# Task 3: Data Visualization
+Describe one numeric variable and the variable treatment type (separately). Comment on it.
+
+By using the dataset reproduce the following graph:
+
+
+Hint: use the function from 2a. Pay attention to
+
+Titles (one title for two graphs) and labels
+Legends (one legend)
+Theme and style (gdocs).
+Percentages.
+Consider grouped graphical comparisons for the chosen numeric variable and treatment type. Comment on it.
+
+Make meaningful conclusions based on b and c (remember about the randomization).
+
+Find the pattern between savings and income, use three variables (third must be categorical). Comment on it.
+
+(Confirm your findings) Compute the correlation between the variables, visualize correlation by using the package ggcorrplot. Does any type of relationship exist berween variables if the Pearson correlation coefficient is near 0?
+
+Approve or reject (using the appropriate visualization):
+
+“After both seminars and video education, the number of answers noticeably increases in all groups.”
+
+
+
+## Solution 3
+```{r}
+ggplot(dat, aes(x=Pre_Treatmen.type))+
+  geom_bar( alpha=0.3, fill='green', col='green')+
+  ggtitle('The bar plot of Treatment type') +
+ylab('Count') + xlab('Treatment type') 
+```
+
+Se can see that Control group and Treatment 2 group have aproximately the same number of students, and the Treatment 1 group has a little bit less than two others.
+
+
+```{r}
+ggplot(dat, aes(x=Pre_age))+
+  geom_histogram( binwidth = 0.6, alpha=0.3, fill='green', col='green', aes(y = ..density..))+
+  ggtitle('The histogram of Age') +
+ylab('Density') + xlab('Age') +
+  geom_vline(aes(xintercept=mean(Pre_age)), col='darkblue', size=1) +
+  geom_vline(aes(xintercept=median(Pre_age)), col='red', size=1)
+```
+
+The shape of distribution is not normal , because the final sample unit of the study is a student from high school, so the most students ages are 16 and 17. This fact also explains why the line of median is 16, and the mean value is between 16 and 17.
+
+```{r}
+p1<-ggplot(dat, aes( x=Pre_Treatmen.type, fill=Pre_P4))+
+  geom_bar( position='dodge')+
+  geom_text(aes(label=scales::percent((..count..)/tapply(..count.., ..x.. ,sum)[..x..])), stat='count', vjust=-0.5, position = position_dodge(0.9))+
+  ylab('Count') + 
+  theme(axis.title.x = element_blank(),
+        legend.title = element_blank())+
+    scale_fill_brewer(palette="Paired")
+
+p2<-ggplot(dat, aes( x=Pre_Treatmen.type, fill=Post_P4))+
+  geom_bar( position='dodge')+
+  geom_text(aes(label=scales::percent((..count..)/tapply(..count.., ..x.. ,sum)[..x..])), stat='count', vjust=-0.5, position = position_dodge(0.9))+
+  ylab('Count')+
+   theme(axis.title.x = element_blank(),
+         axis.title.y = element_blank(),
+         legend.title = element_blank())+
+  scale_fill_brewer(palette="Paired")
+
+g<-ggarrange(p1 + theme(legend.position="none"), 
+          p2 + theme(legend.position="none"), ncol=2, common.legend = TRUE, legend="top")
+  
+annotate_figure(g, top=text_grob("Graph: Treatment type by overall performance(Pre,Post)"))
+```
+
+```{r}
+ 
+ggplot(dat, aes(x = Pre_Treatmen.type , y = Post_Answers, fill= Pre_Treatmen.type))+
+  geom_boxplot(alpha = 0.8) +
+  ggtitle('Boxplot for Post_Answers grouped by treatment type') +
+  ylab ('Answers')+
+  xlab('Tratment type')+
+  stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+  scale_fill_brewer(palette = 'Paired')
+  
+
+```
+
+It is clear that after the treatment the stdents' overall performance has improved. But from the start in all gruops the students that have Fair averall performance are few, so this is not so good. From the boxplot we can see that in 3 groups the meadians are  equal to about 10. In Tratment 2 upper and lower quantiles show that in this group right unswers are more than in the others. It is shown in tha graph above that overall performance in this group is better. 
+
+
+```{r}
+dat$savings <- as.integer(dat$income-dat$spendings)
+```
+
+```{r}
+dt<- dat%>%
+  group_by(Post_P4)%>%
+  summarise( savings =mean(dat$savings), income=mean(income))
+
+ggplot(dat,mapping = aes(x = savings, y = income, color = Post_P4)) +
+  geom_point( alpha = 0.7, size = 4) +
+  ggtitle('The relationship between income and savings grouped by overall performance') +
+  ylab("Income")+
+  xlab('Savings')+
+  geom_point( data=dt, shape = 4, size = 6) + 
+  scale_color_brewer(palette = 'Accent') +
+  labs(color="Overall performance")
+```
+
+From scatterplot we can't conclude that there is not correlation between the savings and income. Also there is not any connection between family's financial situation and overall performance of students.
+
+```{r}
+numdat <- round(cor(dat[, sapply(dat, is.numeric)]), 1)
+ggcorrplot::ggcorrplot(numdat, method = ("square"), title="Corrplot of variables", lab= TRUE )
+
+```
+
+If the Pearson correlation coefficient between 2 variables is near 0 than these 2 variables are independent?
+
+There are positive correlations between the same Pre and Post variables, and of course a negative correlation between spendings and savings. Between income and spendings there is also correlation. 
+
+
+
+```{r}
+dtl <- dat %>% 
+  group_by(Pre_Treatmen.type) %>%
+  summarise(Pre_Percentage = round((sum(Pre_Answers)/(20*n()))*100,1), Post_Percentage = round((sum(Post_Answers)/(20*n()))*100,1)) 
+dtl
+
+ggplot(dtl, aes(x = Pre_Treatmen.type, y=Pre_Percentage )) +
+  geom_col(color ='green',fill = "green", alpha = 0.5) +
+    ggtitle('The percentage of right pre_answers in each group') +
+  ylab("Percentage")+
+  xlab('Treatment type')
+ 
+
+ggplot(dtl, aes(x = Pre_Treatmen.type, y=Post_Percentage )) +
+  geom_col( col ='blue',fill = "blue",  alpha = 0.5) +
+    ggtitle('The percentage of right post_answers in each group') +
+  ylab("Percentage")+
+  xlab('Treatment type')
+```
+
+# Questions
+a.What is the difference between ratio and interval variables?
+
+
+b.Can we rely only on summary statistics in analyzing the data? Why?
+
+c.Can we use the bar plot to describe the numeric variable? Why? Which kind of visualization can be used for numeric data? What about the relationship between 2 numeric variables?
+
+d.How much time did it take to accomplish the HW?
+  
+## Answers
+
+a. For interval variables, the differences between values are meaningfull. They can be ordered and also added and subtracted. The ratio has all previous characteristics, and can be multiplicated. Also in ratio variables 0 has a meaningful value.
+
+b. No, because descriptive statistics  only allow you to make summations about the people or objects that you have actually measured. You cannot use the data you have collected to generalize to other people or objects 
+
+c. No, bar plots are used to describe categorical variables. For numeric variables we can unw histograms. For showing the relationship between 2 numeric variables we can use scatter plots.
+
+d. I don't know, I didn't have time to do it whole day, so I've done it partly daily. Maybe it will take 2 or 3 full days :)
+
+
+
