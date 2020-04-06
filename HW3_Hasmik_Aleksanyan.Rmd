@@ -1,0 +1,282 @@
+---
+title: "Homework 3"
+author: "Hasmik Aleksanyan"
+date: "06, April 2020"
+output:
+   html_document:
+    theme: "flatly"
+    highlight: "zenburn"
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(ggplot2, dplyr, MASS, caret, ggpubr, ggthemes)
+```
+
+
+# Task 1: Cleaning and Understanding Data and Logit
+
+Load the file. Get rid of variables that are irrelevant for logistic regression analysis using the function select(). Also, skip variables which are absent in the description. Check whether the data types are correct, if not make appropriate corrections assigning labels to each level according to the data description.
+For numeric variable replace missing values by column mean, for categorical variables, remove observations with missing values. How many variables and observations do you have before and now?
+
+Check the relationship between each numeric variable and the presence of kidney disease. Save only two most important numeric variables using boxplots. Add mean values to boxplot. Comment on it.
+
+Use glm() function to perform a logistic regression with Class as the response and one of numeric variables as the predictor by using the results of previous subtask. Use the summary() function to print the result. Is the coefficient of explanatory variable significant? Why?
+
+Plot the relationship between response and predictor variables with sigmoid line.
+
+
+## Solution 1
+
+
+```{r}
+dat<- read.csv('biodata.csv', na.strings="?")
+dat <- dplyr::select(dat, c("age", "bp", "su", "rbc", "ba", "bgr", "sod", "pot", "hemo", "wbcc", "rbcc", "htn", "dm", "cad", "appet", "ane", "class"))
+dat$su[dat$su == 6] <- NA 
+dat$age<-as.integer(dat$age)
+dat$bp<-as.integer(dat$bp)
+dat$bgr<-as.integer(dat$bgr)
+dat$sod<-as.integer(dat$sod)
+dat$pot<-as.integer(dat$pot)
+dat$hemo<-as.integer(dat$hemo)
+dat$wbcc<-as.integer(dat$wbcc)
+dat$rbcc<-as.integer(dat$rbcc)
+dat$class<-factor(dat$class,levels = c(0,1), labels=c('No', 'Yes'))
+dat$su <- factor(dat$su, labels = c(0,1,2,3,4,5))
+```
+
+```{r}
+
+dim(dat)
+
+for (i in names(dat)) {
+    if(class(dat[,i]) == 'integer') {
+      dat[,i][which(is.na(dat[,i]))] <- mean(dat[,i], na.rm = TRUE)
+}}
+
+
+dat<-na.omit(dat)
+dim(dat)
+summary(dat)
+
+```
+
+```{r}
+
+ggplot(dat, aes(x = class  , y = bgr, fill= class))+
+geom_boxplot(alpha = 0.8) +
+ggtitle('Relationship between blood glucose random and the presence of kidney disease') +
+ylab ('Blood glucose random')+
+xlab('Presence of chronic kidney disease')+
+stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+scale_fill_brewer(palette = 'Paired')+
+theme(legend.position = 'none')
+
+
+
+ggplot(dat, aes(x = class  , y = hemo, fill= class))+
+geom_boxplot(alpha = 0.8) +
+ggtitle('Relationship between hemoglobin and the presence of kidney disease') +
+ylab ('Hemoglobin')+
+xlab('Presence of chronic kidney disease')+
+stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+scale_fill_brewer(palette = 'Paired')+
+theme(legend.position = 'none')
+
+```
+From the first boxplot we can see that blood glucose IQR for the people who don't have kidney disease is smaller than for people who have kidney disease. The median and mean for for people who have kidney disease are higher.
+From the second boxplot it is clear that the hemoglobin IQR is different between the people who have kidney desease and the people who don't have. Also the means and medians are diffrent.
+
+```{r}
+L1 <- glm(class ~ hemo , dat, family = binomial(link = "logit"))
+summary(L1)
+```
+The coefficants are significant in the 99% confidence interval, cause Pr(>|t|) is less than a number close to 0. 
+
+```{r}
+
+dat$y <- ifelse(dat$class == "Yes", 1, 0)
+ggplot(dat, aes(hemo, y)) +
+   geom_jitter(height = 0.01) +
+  ggtitle('Relationship between hemoglobin and the presence of kidney disease with sigmoid line') +
+  ylab ('Presence of chronic kidney disease')+
+  xlab('Hemoglobin')+
+  stat_smooth(method="glm", method.args=list(family="binomial"), se=FALSE)
+```
+
+```{r, echo= FALSE}
+dat <- dplyr::select(dat,-c("y"))
+```
+
+# Task 2: Simple Logistic Regression
+
+Use the function glm() to perform logistic regression with Class as a response variable and one of the categorical variables as the predictor. Chose the significant one. Use the function summary() to print the results.
+
+Interpret the coefficients of the explanatory variable in terms of absolute and exponential values?
+
+Evaluate the probability of(for?) the base value of explanatory variable. Comment on it.
+
+What are Null deviance and residual deviance from the summary output?
+
+Calculate the exponent of the β1 coefficient using only your data and functions addmargins() and table(). Comment on it.
+
+## Solution 2
+
+```{r}
+
+ggplot(dat, aes(x = rbc , fill= class))+
+geom_bar(alpha = 0.8, position = "dodge") +
+ggtitle('Relationship between hred blood cells and the presence of kidney disease ') +
+ylab ('')+
+xlab('Red blood cells')+
+
+scale_fill_brewer(palette = 'Paired')
+
+```
+
+
+```{R}
+
+L2 <- glm(class ~ rbc, data = dat, family = binomial(link = "logit"))
+summary(L2)
+
+L2$coefficients
+exp(L2$coefficients)
+```
+
+In relation to the base, those whose red blood cells are normal are less likely to get kidney disease, because coefficient is negative. People whose red blood cells are normal are 91 percent less odds to get kidney disease.
+
+```{r}
+
+dt <- data.frame(rbc = c("abnormal", "normal"))
+predict(L2, dt,type="response")
+```
+The probability to get kidney disease is higher for those people whose red blood cells are abnormal than  for those whose red blood cells are normal.
+
+
+The null deviance shows how well the response is predicted by the model with an intercept. The residual deviance shows how well the response is predicted by the model when the predictors are included. So the smaller the number the better out model. And in our summary the numbers are small.
+
+
+```{r}
+tab <- addmargins(table(dat$class, dat$rbc))
+pnormal = tab[2,2]/tab[3,2]
+odds.normal = pnormal / (1 - pnormal )
+pabnormal = tab[2,1]/tab[3,1]
+odds.abnormal = pabnormal / (1 - pabnormal)
+
+odds.ratio = odds.normal/odds.abnormal
+odds.ratio
+```
+People whose red blood cells are normal are 91 percent less odds to get kidney disease.
+
+
+
+# Task 3: Multiple Logistic Regression
+
+Divide the data frame into Train and Test sets (70:30), such that the proportion of Clas for both training and testing sets will correspond to the distibution of Class in the whole data.2 Use the full data set to perform the model with Class as a dependent variable with the function stepAIC() to obtain the best model based on AIC criteria. Hide the output.
+
+Remove all non-significant variables from the last model. Show only the best model in which all variables must be significant at least at the level 0.01. Use the summary() function to print the result.
+
+Pick your own new observation and predict the response. Comment on it.
+
+Now fit two logistic regression models using training data. Both models should be the result of previous subtask (a).
+
+For the first model with only significant coefficients, predict the probability of the presence of chronic kidney disease for testing set. Compute the confusion matrix using table() function. Figure out the overall fraction of correct predictions, sensitivity, and specificity for the test data using only confusion matrix. Check your computations using the function confusionMatrix().
+
+Explain what the confusion matrix is telling you about the types of mistakes made by logistic regression.
+
+
+
+## Solution 3
+
+```{r, include=FALSE}
+set.seed(128)
+split <- caret::createDataPartition(dat$class, p = 0.7, list = FALSE)
+train <- dat[split,]
+test <- dat[-split,]
+
+table(dat$class)[1]/ sum(table(dat$class))
+table(train$class)[1]/ sum(table(train$class))
+table(test$class)[1]/ sum(table(test$class))
+
+
+L3 <- glm(class ~ . , data = dat, family = binomial(link = "logit"))
+summary(L3)
+step <- stepAIC(L3, direction = 'backward')
+step
+```
+
+
+```{r}
+
+L4 <- glm( class ~ bp + rbc + bgr + sod  + hemo +  wbcc + cad, family = binomial(link = "logit"), data = dat)
+summary(L4)   
+
+L5 <- glm(class ~ hemo + rbc, family = binomial(link = "logit"), data = dat)
+summary(L5)
+dt2 <- data.frame (hemo = c(10, 15), rbc= c("abnormal", "normal"))
+predict(L5, dt2,type="response")
+
+```
+
+
+```{r}
+L6 <- glm(class ~ bp + rbc + bgr + sod + hemo + wbcc + cad, family = binomial(link = "logit"), data = train)
+L7 <- glm(class ~ hemo + rbc, family = binomial(link = "logit"), data = train)
+
+```
+
+
+```{r}
+test$class_hat <- predict(L6, newdata = test, type = "response")
+
+addmargins(table( ifelse(test$class_hat >= 0.5, "Yes", "No"), test$class))
+(acc <- (40 + 51)/(95))
+(sens <- 51/(54))
+(spec <- 40/(41))
+
+confusionMatrix(as.factor(ifelse(test$class_hat >= 0.5, "Yes", "No")),test$class, positive = "Yes")
+```
+From the cconfusion matrix false positive (type 1 error) is 1, false negative (type 2 error) is 3.
+
+
+# Task 4: Model Selection
+
+While evaluating the goodness of fit of the first model I used the Hosmer-Lemeshow test. The Chi-squared value equals to 96 was displayed on my output. Try to calculate this number without any extra libraries. Do not use the same functions which are written in the Hosmer-Lemeshow test (R).
+
+## Solution 4
+
+```{r} 
+L8 <- glm(class ~ bp + bgr + hemo + rbcc + cad, data = train, family = binomial(link="logit"))
+
+predicttest <- predict(L8, newdata = test, type="response")
+
+y <- test$class; yhat <- predicttest
+
+ResourceSelection::hoslem.test(y, yhat)
+
+```
+
+
+# Questions:
+
+1.What is the difference between the ROC and the precision-recall curve (PRC)? When do we need to consider PRC? Why?
+
+2.Why Linear Probability Model is not preferable to Logistic Regression for models with binary response variable?
+
+3.Is it possible to calculate R2 for Logistic Regression? Is it the same as for Linear Regression? Why?
+
+4.How much time did it take to accomplish the HW?
+
+
+## Answers
+
+1.ROC curve represents a relation between sensitivity and False Positive Rate. In PRC there is relation betweeen recall and precision. Recall is the same as sensitivity (Recall = TruePositives / (TruePositives + FalseNegatives)) and precision shows the number of correct positive predictions made (Precision = TruePositives / (TruePositives + FalsePositives)). So True Negative result is not used in PRC. We use ROC curves when there are approximately equal numbers of observations for each class. So when there is big imbalance in the observations between the two classes we use PRC.
+
+2.Because there is heteroskedasticity, problem with alternative coding. Also $\varepsilon$ is not continuous and normally distributed. Some estimates may be outside [0,1] interval.
+
+3.Yes, it is possible to calculate R2 for Logistic Regression. In Logistic regression the estimates of R2 are values which maximize the likelihood of the data which have been observed.
+
+4.More than 4 full days.
