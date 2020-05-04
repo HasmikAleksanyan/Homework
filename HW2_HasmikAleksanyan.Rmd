@@ -1,0 +1,268 @@
+---
+title: "Homework 2"
+author: "Hasmik Aleksanyan"
+date: "06, April 2020"
+output:
+   html_document:
+    theme: "flatly"
+    highlight: "zenburn"
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(ggplot2, dplyr, knitr, ggthemes, stargazer, MASS, car, caTools)
+```
+
+# Task 1: Cleaning and Understanding Data
+
+Load the file. Get rid of variables that are irrelevant for regression analysis using the function select(). Check whether the data types are correct, if not make appropriate corrections assigning labels to each level according to the data description.
+Create the function “repl.mis” that takes the data frame as an argument and replaces the missing values
+for numeric variable with the value in the vectors immediately before the missing value. The first observation’s NA should be replaced by the average value of the corresponding variable, but the warning message about this replacement should be seen.
+
+for categorical variables with the mode of variable. If the variable has more than 1 modes, replace NA with the first mode and show the warning information about it.
+
+Hints: For the warning message use the function warning(). You can use looping function to choose the specific type of variable.
+
+The output of the function should be the data.
+
+Note: For simplicity, consider both NA-s and NaN-s as not available.
+
+Note: R does not have a standard built-in function to calculate the mode of a sequence. Be attentive to variables which are not unimodal.
+
+Clean the not available values using the function defined in b.
+
+Find the two most correlated numeric variables with grade point average of students using cor() and pairs() functions. Comment on it.
+
+Find the binary variables which affect grade point average of students using boxplots. Comment on it.
+
+
+
+## Solution 1
+
+```{r}
+dat <- read.csv('gpafactors.csv')
+dat <- dplyr::select(dat, c("age", "ehpw", "hpw", "hsleep", "gpa", "imp","gender","job","type","marital.status"))
+
+dat$hsleep <- as.integer(dat$hsleep)
+dat$gpa <- as.integer(dat$gpa)
+dat$imp <- factor(dat$imp, labels = c("Not important", "Slightly important", "Moderately important", "Important", "Very important"))
+str(dat)
+```
+
+```{r}
+getmode <- function(v) {
+   uniqv <- unique(v)
+   uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+
+dat$age[1] <- round(mean(dat$age,na.rm = TRUE),1)
+
+for (i in names(dat)) {
+    if(class(dat[,i]) == 'integer') {
+      dat[,i][which(is.na(dat[,i]))] <-  dat[,i][which(is.na(dat[,i])) - 1]}
+    else {dat[,i][which(is.na(dat[,i]))] <- getmode(dat[,i])
+      
+    }}
+
+summary(dat)
+```
+
+```{r}
+dat1 <- Filter(is.numeric, dat)
+
+cor(dat1, use="all.obs", method="kendall")
+pairs(dat1)
+```
+Two most correlated variables are gpa and hpw variables.
+
+```{r}
+ggplot(dat, aes(x = job , y = gpa, fill= job))+
+  geom_boxplot(alpha = 0.8) +
+  ggtitle('Boxplot for GPA grouped by Job') +
+  ylab ('GPA')+
+  xlab('Job')+
+  stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+  scale_fill_brewer(palette = 'Paired')+
+  theme(legend.position = 'none')
+```
+The GPA IQR between emloyed and unemployed students is different. Also the median and mean of unemployed students are higher than emloyed students'.
+
+
+```{r}
+ggplot(dat, aes(x = gender , y = gpa, fill= gender))+
+  geom_boxplot(alpha = 0.8) +
+  ggtitle('Boxplot for GPA grouped by Gender') +
+  ylab ('GPA')+
+  xlab('Gender')+
+  stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+  scale_fill_brewer(palette = 'Paired')+
+  theme(legend.position = 'none')
+```
+The GPA IQR between female and male students is different. Also the median and mean of males students are higher than female students'.
+
+
+# Task 2: Simple Linear Regression
+
+Use the function lm() to perform a simple linear regression with GPA as a response and the most correlated numeric variable as a predictor. Use the summary() function to print the results. Comment on the output in the following way:
+Explain the meanings of coefficients. Do they all have a meaning?
+Formulate mathematically Null and Alternative hypotheses for the significance of a variable.
+Which coefficients are significant (for which level)? Why and why not?
+Explain the meaning of R2 in your model.
+Plot the response and the predictor. Use the function geom_abline() (rather than geom_smooth()) to display the least squares regression line.
+
+
+## Solution 2
+
+```{r}
+model1 <- lm(gpa ~ hpw, data = dat)
+summary(model1)
+```
+GPA is predicted to increase 2.88796 when the hpw variable goes up by one unit,and is predicted to be 5.6.869 when hpw is zero.
+
+$H_0: \beta = 0$
+$H_1: \beta \neq 0$
+
+Pr(>|t|) is less than a number close to 0. So the coefficients are significant for 99% confidence interval.
+$R^2 = 0.8$ so approximately 80% of the variation for GPA can be explained by the hpw variable.
+
+
+```{r}
+g1 <- ggplot(dat, aes(x = hpw, y = gpa)) +
+  geom_point (size = 2.1, alpha = 0.8, col = "pink")+
+  ggtitle("The relationship between GPA and studying hours")+
+  xlab("Hours spent on studying a week")+
+  ylab("GPA")
+g1
+  
+g2 <- g1 +
+  geom_abline(slope = 2.88, intercept = 5.60, col = "red")
+g2
+```
+
+
+# Task 3: Multiple Linear Regression
+
+Discover the relationship between marital status and grade point average of the students using boxplot.
+Run the regression model with GPA as a response and marital status as explanatory variable.
+In this regression model, the reference group for the categorical variable should be the value single. You can use the function relevel().
+
+Interpret the coefficients of a categorical variable.
+Add to the previous model one numeric variable. Do not apply summary(). Plot the response and the predictors. You must have 3 labeled parallel regression lines.
+
+
+## Solution 3
+
+```{r}
+ggplot(dat, aes(x = marital.status , y = gpa, fill = marital.status))+
+  geom_boxplot(alpha = 0.8) +
+  ggtitle('Boxplot for GPA grouped by Marital Status') +
+  ylab ('GPA')+
+  xlab('Marital status')+
+  stat_summary(fun.y = mean , geom = 'point', size = 4, color = 'white')+
+  scale_fill_brewer(palette = 'Paired')+
+  theme(legend.position = 'none')
+
+model2 <- lm(gpa ~ relevel(marital.status, ref = "single"), data = dat)
+summary(model2)
+```
+The intercept shows the average of GPA of single student, being single the average of GPA increases 2.9184 points, and being married the average of GPA decreases 25.2752 points.
+
+```{r}
+
+model3 <- lm(gpa ~ hpw + relevel(marital.status, ref = "single") , data = dat)
+
+g3<- g1 + 
+  geom_abline(slope = coef(model3)[2], intercept = coef(model3)[1], col = "green") +
+  geom_abline(slope = coef(model3)[2], intercept = coef(model3)[1] + coef(model3)[3], col = "red") +
+  geom_abline(slope = coef(model3)[2], intercept = coef(model3)[1] + coef(model3)[4], col = "blue") +
+   ggtitle('Regression lines with catecorigal variable')
+g3
+```
+
+# Task 4: Model Selection
+
+Divide the data frame into Train and Test sets with the following propotion - (75:25). Do not forget about set.seed() function.
+Let the threshold for the correlation coefficient be 0.7. Is there multicollinearity in the data?
+Try different models with GPA as a dependent variable. Exclude from the models one of multicollinear variables which is less correlated with GPA. Save only the best model (based on both R2 and significance of coefficients). Why do we need to look at Adjusted R2?
+Formulate Null and Alternative hypotheses for the whole model (a.k.a for F statistics). Is the H0 hypothesis rejected? How do we choose the level of significance?
+
+Use the function stepAIC() to obtain the best model based on AIC criteria. Use the forward selection procedure. Describe how forward selection works.
+Calculate RMSE for testing set for both models. Which one is better?
+
+
+
+## Solution 4
+
+
+```{r}
+set.seed(123)
+split <- sample.split(dat, SplitRatio = 0.75)
+train <- dat[split,]
+test <- dat[-split,]
+
+dat2 <- Filter(is.numeric, dat)
+cor(dat2, use="all.obs", method="kendall")
+
+```
+There is multicollinearity between  hwp and hsleep variables.
+
+```{r}
+model4 <- lm(gpa ~ ehpw + hpw + imp + gender + type, data = train)  
+summary(model4)
+```
+
+We need to look at Adjusted $R^2$, cause it will only increase on adding a variable to the model if the addition of the variable reduces the residual mean squares.
+
+The hypotheses are
+$H_0: \beta_1=\beta_2= ... = \beta_n = 0$
+$H_1: \exists \beta_i \neq 0$
+
+P-value is less than a number close to 0. So we reject Null hypotheses in 99%  confidence interval.
+
+```{r}
+model5 <- lm(gpa ~ ., data = train)
+step <- stepAIC(model5, direction = 'forward')
+step
+model6 <- lm(formula = gpa ~ age + ehpw + hpw + hsleep + imp + gender + 
+    job + type + marital.status, data = train)
+
+
+predict1 <- predict(model4, test)
+predict2 <- predict(model6, test)
+
+error1<-predict1-test$gpa
+error2<-predict2-test$gpa
+
+RMSE1<-sqrt(mean(error1^2))
+RMSE2<-sqrt(mean(error2^2))
+RMSE1
+RMSE2
+```
+Model6 is better, cause RMSE of Model6 is smaller.
+
+
+# Questions
+
+1.Do we need to prefer the OLS estimation to ML evaluation in regression models if all assumptions of Gauss-Markov theorem are satisfied for small data? Why? When we can equally use these methods?
+
+2.Prove that R2 for regression with one explanatory variable is the same as the squared of the sample correlation coefficient between response and the explanatory variable.
+
+3.Consider the simple linear regression model. Is there any relationship between the sample correlation coefficient between response and explanatory variables (ρxy) and the coefficient of explanatory variable (β1).
+
+4.Why do we need to include β0 in the regression equation?
+
+5.How much time did it take to accomplish the HW?
+
+## Answers
+
+1.Yes, because ordinary least squares regression produces unbiased estimates that have the smallest variance of all possible linear estimations.
+
+2. $r^2= \frac{cov(y,\hat{y})cov(y,\hat{y})}{var(y)var(\hat{y})} = \frac{cov(\hat{y} + e, \hat{y})(cov(\hat{y} + e, \hat{y}))}{var(y)var(\hat{y})}= \frac{(cov(\hat{y},\hat{y}) +cov(\hat{y},e))(cov(\hat{y},\hat{y}) +cov(\hat{y},e))}{var(y)var(\hat{y})}=\frac{cov(\hat{y},\hat{y})cov(\hat{y},\hat{y})}{var(y)var(\hat{y})} = \frac{var(\hat{y})var(\hat{y})}{var(y)var(\hat{y})}=\frac{var(\hat{y})}{var(y)} = \frac{ESS}{TSS} = R^2$
+
+3. Yes, Correlation coefficient describes the relationship between two variables, so does the $\beta_1$. It  is the estimated coeficient of the explanatory variable indicating a change on response variable caused by a unit change. 
+
+4. $\beta_0$ shows the mean value of depentent variable if all independent variables are 0.
+
+5. More than 3 full days.

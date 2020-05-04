@@ -1,0 +1,289 @@
+---
+title: "Homework 4"
+author: "Hasmik Aleksanyan"
+date: "04, May 2020"
+output:
+   html_document:
+    theme: "flatly"
+    highlight: "zenburn"
+    toc: TRUE
+    toc_float: TRUE
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(ggplot2, dplyr, MASS, AER, ggpubr, ggthemes, tidyr, openxlsx, caTools, glmnet)
+```
+
+# Task 1: Poisson Regression: Data Cleaning and Description
+
+Load the awards.csv file. Get rid of variables that are irrelevant for Poisson regression analysis using function select(). Pay attention to the last column of your data. Use the separate() function to solve the problem based on data description.
+
+Check whether the data types are correct, if not, make appropriate corrections, assigning labels to each level according to the data description. Use the glimpse() function to see the structure of the final data.
+
+Find your dependent variable for Poisson regression analysis. Plot the histogram of your target variable. Calculate the unconditional mean and variance of your target variable. What can you notice?
+
+Find the categorical variables which affect your target variable using boxplots. Comment on it.
+
+Use group_by() and summarise() functions to conclude about conditional variances and the means of your target variable grouped by categorical variables. Comment on it: do you have the problem of overdispersion?
+ 
+## Solution 1
+
+```{r}
+dat <- read.csv("awards.csv")
+dat <- dplyr::select(dat, c("awards", "math", "physics", "hpw", "gender", "imp", "school.prog"))
+dat <- dat %>% separate('school.prog',  c('school', 'prog'))
+dat$imp<-factor(dat$imp,levels = c(1,2,3,4), labels=c("Not important", "Slightly important", "Important", "Very important"))
+dat$school<-factor(dat$school,levels = c('Public', 'Private'), labels=c('Public', 'Private'))
+dat$prog<-factor(dat$prog,levels = c(0,1,2,3), labels=c('General', 'Pre-Academic', 'Academic', 'Vocational'))
+glimpse(dat)
+```
+
+```{r}
+ggplot(data = dat, aes( x = awards)) +
+  geom_histogram(bins = 30) +
+  labs (x = 'Number of awards', y = "Count") +
+  ggtitle("The distribution of awards")
+dat %>%
+  summarise(Mean = mean(awards), Var = var(awards), SD = sd(awards))
+```
+We can see that on average students get 3 awards. And there is equidispersion.
+
+```{r}
+ggplot(data = dat, aes(x = gender, y = awards, fill = gender)) + 
+  geom_boxplot()+
+  labs(x = "Gender", y = "Number of awards", title = "Awards by gender")
+
+ggplot(data = dat, aes(x = imp, y = awards, fill = imp)) + 
+  geom_boxplot()+
+  labs(x = "Importance", y = "Number of awards", title = "Awards by importance")
+
+ggplot(data = dat, aes(x = school, y = awards, fill = school)) + 
+  geom_boxplot()+
+  labs(x = "School", y = "Number of awards", title = "Awards by school")
+
+```
+From the "Awards by gender" and "Awards by school" boxplots we can see  IQRs, meadians and means are different. From the  "Awards by importance" boxplot we can see that in the 1st and 2nd levels of importance there isn't any difrence but in the 3rd and 4th there is obvious difference. Type of program in which the students were enrolled doesn't affect on awards.
+
+```{r}
+dat %>% group_by(gender) %>%
+  summarise(Mean = mean(awards) , Var = var(awards))
+
+dat %>% group_by(imp) %>%
+  summarise(Mean = mean(awards) , Var = var(awards))
+
+dat %>% group_by(school) %>%
+  summarise(Mean = mean(awards) , Var = var(awards))
+```
+
+
+# Task 2: Poisson Regression: Modeling
+
+Use the glm() function to perform an intercept-only Poisson regression model with your chosen target variable as the response. Use the output of your model to calculate the mean of your target variable.
+
+Exclude from full model variables with insignificant coefficients. Show the result. Explain the meanings of coefficients of your model (at least one numeric and one categorical).
+
+Pick your own new observation and predict the λ. Comment on it.
+
+Calculate the probability of having more than 15 awards using your predicted λ from Problem 2 c.
+
+Add to your data a new (created) variable with the problem of unconditional overdispersion.1 Show the problem by computing the average and variance of your variable. (Your variable needs to have a similar meaning to your target variable).
+
+Run the model with the new variable as a response. Your model must contain only significant coefficients.
+
+Use the function dispersiontest() to find out overdispersion. Formulate Null and Alternative hypotheses for trafo = Null (mathematically and explain it). Do you have an overdispersion?
+
+Run the negative binomial and quasi-Poisson model. Show only coefficients. Find the best model based on deviance and AIC. Which is the best model? Why does not quasi-Poisson model have AIC?
+
+## Solution 2
+
+```{r}
+model1 <- glm(awards ~ 1,  data = dat, family = poisson(link = log))
+summary(model1)
+
+mean(dat$awards)
+exp(model1$coefficients)
+```
+
+```{r}
+model2 <- glm(awards ~ math + physics + hpw + gender,  data = dat, family = poisson(link = log))
+summary(model2)
+exp(model2$coefficients)
+```
+
+1 unit of increase in math increases average number of awards awards by 1% and  being male increases average number of awards by 31%.
+
+```{r}
+model3 <- glm(awards ~ math + school + gender,  data = dat, family = poisson(link = log))
+newdat <- data.frame ( gender = "male", school = "Private", math = 7)
+as.numeric(lambda <- predict(model3, newdata = newdat, type = "response"))
+x <- dpois (15, lambda = lambda)
+format(x,  scientific=FALSE)
+```
+My model is predicting there will be roughly 3 awards if the student is male, type of school is private and his math score is 7.
+
+```{r}
+set.seed(27)
+dat$award <- rnbinom(n = 2500, size = 13, mu = 4)
+mean(dat$award)
+var(dat$award)
+```
+
+
+```{r}
+model4 <- glm(award ~  school + gender,  data = dat, family = poisson(link = log))
+summary(model4)
+dispersiontest(model4, trafo = NULL)
+```
+Null and Alternative hypotheses
+
+$H_0: VAR[y] = \mu$ equidispersion
+$H_1:VAR[y] = \mu + \alpha * trafo(\mu)$  
+      $trafo(\mu) = \mu => VAR[y] = (1 + \alpha) * \mu = dispersion * \mu$ 
+
+dispersion = 1.335924 > 1 => there is overdispersion
+
+```{r}
+model.qp <- glm(award ~  school + gender,  data = dat, family = quasipoisson(link = log))
+summary(model.qp)
+model.nb <- glm.nb(award ~  school + gender,  data = dat)
+summary(model.nb)
+```
+
+```{r}
+data.frame(coef(model4), coef(model.qp), coef(model.nb))
+
+data.frame(deviance(model4),deviance(model.nb),deviance(model.qp))
+data.frame(model4$aic,model.nb$aic)
+```
+Negative binomial model is the best, cause it has the smallest deviance and AIC. 
+Quasipoisson regression uses Quasi-Likelihood estimation, thus it doesn't have AIC.
+
+# Task 3: Regularization
+
+Load movies_data.xls and get rid of one useless variable. Split data into train and test using the following proportion 60:40, respectively.
+
+Fit a linear model using least squares on training set, and report the test error obtained.
+
+Fit a ridge regression on training set, with λ chosen by cross-validation. Report the test error obtained.
+
+Fit a LASSO model on the training set, with λ chosen by cross-validation. Report the test error obtained, along with the number of non-zero coefficient estimates.
+
+Find the best elastic net with α and λ chosen by cross-validation.
+
+Is there much difference among the test errors resulting from these four approaches. Which one is the best?
+
+## Solution 3
+
+```{r}
+dt <- read.xlsx("movies_data.xlsx")
+dt <- dplyr::select(dt, -c('X1'))
+
+set.seed(27)
+sample <- sample(nrow(dt), nrow(dt) * 0.6, replace = F)
+train <- dt[sample, 1:15]
+test <- dt[-sample, 1:15]
+
+x <- model.matrix(budget_adjusted ~ .,train)[,-1] 
+y <- train$budget_adjusted
+
+xt <- model.matrix( budget_adjusted ~ .,test)[,-1] 
+yt <- test$budget_adjusted
+```
+
+
+```{r}
+lm.mod <- lm(budget_adjusted ~ ., data = train)
+lm.mod.pred=predict(lm.mod, test)
+lm.mod.mse=round(mean((yt-lm.mod.pred)^2))
+lm.mse <- format(lm.mod.mse,  scientific=FALSE)
+
+```
+
+
+```{r}
+set.seed(2708)
+grid <- exp(seq(-2,11, length = 100))
+ridge.cv <- cv.glmnet(y = y, x = x, lambda = grid, alpha = 0, nfolds = 10)
+ridge.mod <- glmnet(y = y, x = x, alpha=0, lambda=ridge.cv$lambda.min, standardize = T)
+
+ridge.pred = predict(ridge.mod, s = ridge.cv$lambda.min, newx = xt) 
+ridge.mse = mean((ridge.pred - yt)^2)
+
+ridge.mse <- format(ridge.mse,  scientific=FALSE)
+```
+
+
+```{r}
+set.seed(2708)
+grid <- exp(seq(-2,11, length = 100))
+lasso.cv <- cv.glmnet(y = y, x = x, lambda = grid, alpha = 1, nfolds = 10)
+
+lasso.mod <- glmnet(y = y, x = x, lambda=lasso.cv$lambda.min, alpha=1, standardize = T)
+
+lasso.pred = predict(lasso.mod, s = lasso.cv$lambda.min, newx = xt) 
+lasso.mse = mean((lasso.pred - yt)^2)
+
+lasso.mse <- format(lasso.mse,  scientific=FALSE)
+```
+
+
+```{r}
+
+
+models <- list()
+set.seed(2708)
+for (i in 0:10) {
+  name <- paste0("alpha", i/10)
+  models[[name]] <- cv.glmnet(x, y, type.measure="mse", alpha=i/10)
+}
+
+results <- data.frame()
+
+for (i in 0:10) {
+  name <- paste0("alpha", i/10)
+  predicted <- predict(models[[name]], s = models[[name]]$lambda.min, newx = xt)
+  mse <-mean((yt - predicted)^2)
+  temp <- data.frame(alpha=i/10, mse = mse, name = name)
+  results <- rbind(results, temp)
+}
+
+elnet.mse <- format(min(results$mse),  scientific=FALSE)
+```
+
+
+```{r}
+data.frame(lm.mse, ridge.mse, lasso.mse, elnet.mse)
+
+```
+
+There is not much difference among the test errors resulting from these four approaches. The linear model has the smallest mse so it is the best.
+
+
+# Questions
+
+a.What is the equidispersion in Poisson regression? Why do we need to avoid overdispersion?
+
+b.Why Poisson regression is called log-linear?
+
+c.What is regularization? Why do we need it?
+
+d.Describe the main idea of ridge regression.
+
+e.What is the difference between ridge and LASSO regression?
+
+f.How much time did it take to accomplish the HW?
+
+## Answers
+
+a. If var(y|x) = mean(y|x) => there is equidispersion. If there is overdispersion poisson regression will estimate wrong standard errors.
+
+b. Because we use log on the average value of the dependent variable.
+
+c. Regularization solves multicollinearity problem. It performs linear regression model, while shrinking the coefficients $\hat{\beta}$ toward 0.
+
+d. The main idea is to find new line with small amount of bias in order to have less variance.
+
+e. Ridge regression includes all predictors in the final model while lasso doesn't, it can estimate coefficients 0 value. They differ with the penalty term.  
+
+f. Maybe 3 or 4  days.
